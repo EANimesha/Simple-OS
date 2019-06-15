@@ -82,7 +82,7 @@ _shell:
 	mov di, cmdVer
 	mov cx, 4
 	repe	cmpsb
-	jne	_cmd_info		;next command;
+	jne	_cmd_displayMemory		;next command;
 	
 	call _display_endl
 	mov si, strOsName		;display version
@@ -103,7 +103,25 @@ _shell:
 	jmp _cmd_done
 
 
+	_cmd_displayMemory:
+		push ax
+		push dx
 
+		call _display_endl		
+		mov si, strCmd0
+		mov di, cmdMemory
+		mov cx, 5
+		repe	cmpsb
+		jne	_cmd_info
+
+	
+		mov si, strmemory	; Prints base memory string
+		mov al, 0x01
+		int 0x21
+
+	
+	
+		jmp _cmd_done
 
 
 	; display hardware info
@@ -112,7 +130,7 @@ _shell:
 	mov di, cmdInfo
 	mov cx, 5
 	repe	cmpsb
-	jne	_cmd_displayHelpMenu		;next command
+	jne	_cmd_displayHelpMenu	;next command
 	
 	call _display_endl
 	mov si, strInfo		; Prints the topic
@@ -123,6 +141,9 @@ _shell:
 	call _cmd_cpuVendorID
 	call _cmd_ProcessorType
 	call _cmd_SerialNo
+	call _cmd_CPUFeatures
+	call _cmd_mouse
+	
 	
 	call _display_endl
 	jmp _cmd_done
@@ -185,24 +206,123 @@ _shell:
 		mov al, 0x01
 		int 0x21
 
-		mov eax, 3		; get first part of the brand
-		cpuid
-		and edx,1
-		;mov  [strcpusno], eax
-		;mov  [strcpusno+4], ebx
-		mov  [strcpusno], ecx
-		mov  [strcpusno+32], edx
+		;mov eax,0x01	
+		;cpuid
+		;and edx,1
+		;mov  [strcpusno], edx
 		
 
-
-		mov si, strcpusno           ;print processor type
-		mov al, 0x01
-		int 0x21
+		;call _print_dec	
+		;mov si, strcpusno          
+		;mov al, 0x01
+		;int 0x21
 		ret
 
+	_cmd_CPUFeatures:
+		call _display_endl
+		mov si, strcpufeatures
+		mov al, 0x01
+		int 0x21
+
+		mov ax, 1
+		cpuid
+
+		checksse:
+			test edx, 00000010000000000000000000000000b
+			jz checksse2
+			mov si, sse
+			mov al, 0x01
+			int 0x21
+
+		checksse2:
+			call _display_space
+			test edx, 00000100000000000000000000000000b
+			jz checksse3
+			ret
+			mov si, sse2
+			mov al, 0x01
+			int 0x21
 
 
+		checksse3:
+			test ecx, 00000000000000000000000000000001b
+			jz checkssse3
+			mov si, sse3
+			mov al, 0x01
+			int 0x21
+
+		checkssse3:
+			test ecx, 00000000000000000000001000000000b
+			jz checksse41
+			mov si, ssse3
+			mov al, 0x01
+			int 0x21
+
+		checksse41:
+			test ecx, 00000000000010000000000000000000b
+			jz checksse42
+			mov si, sse41
+			mov al, 0x01
+			int 0x21
+
+		checksse42:
+			test ecx, 00000000000100000000000000000000b
+			jz checkaes
+			mov si, sse42
+			mov al, 0x01
+			int 0x21
+
+		checkaes:
+			test ecx, 00000010000000000000000000000000b
+			jz checkavx
+			mov si, aes
+			mov al, 0x01
+			int 0x21
+
+		checkavx:
+			test ecx, 00010000000000000000000000000000b
+			jz not
+			mov si, avx
+			mov al, 0x01
+			int 0x21
+
+		not:
+			mov si, notf
+			mov al, 0x01
+			int 0x21
+
+		call _display_endl
+		ret
+		
 	
+
+	;display mousestatus
+	_cmd_mouse:	
+		call _display_endl
+		mov si, strmouse
+		mov al, 0x01
+		int 0x21
+
+		mov ax, 0
+		int 33h
+		cmp ax, 0
+		jne ok
+		
+		mov si, strMouse0
+		mov al, 0x01
+		int 0x21
+		call _display_endl
+		
+		ret
+
+	ok:
+		mov ax, 1
+		int 33h
+		mov si, strMouse1
+		mov al, 0x01
+		int 0x21
+		call _display_endl
+		
 
 
 	_cmd_displayHelpMenu:
@@ -211,7 +331,7 @@ _shell:
 		mov di, cmdHelp
 		mov cx, 5
 		repe	cmpsb
-		jne	_cmd_mouse
+		jne	_cmd_exit
 
 		call _display_endl
 		mov si, strHelpMsg1
@@ -229,36 +349,8 @@ _shell:
 		jmp _cmd_done
 
 
-
 	
-	;display mousestatus
-	_cmd_mouse:		
-		mov si, strCmd0
-		mov di, cmdMouse
-		mov cx, 6
-		repe	cmpsb
-		jne	_cmd_exit
 
-		mov ax, 0
-		int 33h
-		cmp ax, 0
-		jne ok
-		
-		mov si, strMouse0
-		mov al, 0x01
-		int 0x21
-		call _display_endl
-		
-		jmp _cmd_done
-
-	ok:
-		mov ax, 1
-		int 33h
-		mov si, strMouse1
-		mov al, 0x01
-		int 0x21
-		call _display_endl
-		
 
 	; exit shell
 	_cmd_exit:		
@@ -285,6 +377,13 @@ _shell:
 	ret
 
 
+_print_dec:
+	push ax			; save AX
+	push cx			; save CX
+	push si			; save SI
+	mov ax,dx		; copy number to AX
+	mov si,10		; SI is used as the divisor
+	xor cx,cx		; clear CX
 
 
 
@@ -559,7 +658,7 @@ _display_prompt:
 	cmdExit			db	"exit", 0x00
 	cmdInfo			db	"info", 0x00		; Shows hardware information
 	cmdHelp			db	"help",0x00
-	cmdMouse  		db 	"mouse",0x00	;show mouse status
+	cmdMemory		db	"memory",0x00
 
 	txtVersion		db	"version", 0x00	;messages and other strings
 	msgUnknownCmd		db	"Unknown command or bad file name!", 0x00
@@ -568,12 +667,28 @@ _display_prompt:
 	strcpuid		db	"CPU Vendor : ", 0x00
 	strtypecpu		db	"CPU Type: ", 0x00
 	strcpuserial	db	"CPU Serial No : ",0x00
+	strmouse 		db 	"Mouse Status : ",0x00
+	strcpufeatures	db	"CPU Features: ",0x00
+	sse				db 	"SSE ", 0x00
+	sse2 			db 'SSE2 ', 0x00
+	sse3 			db 'SSE3 ', 0x00
+	ssse3 			db 'SSSE3 ', 0x00
+	sse41 			db 'SSE4.1 ', 0x00
+	sse42 			db 'SSE4.2 ', 0x00
+	aes				db 'AES ', 0x00
+	avx 			db 'AVX ', 0x00
+	notf			db	' features not found',0x00
+	strmemory		db	"Base Memory size: ", 0x00
+	strsmallextended	db	"Extended memory between(1M - 16M): ", 0x00
+	strbigextended		db      "Extended memory above 16M: ", 0x00
+	strtotalmemory		db	"Total memory: ", 0x00
 
 	strHelpMsg1		db  "Type ver for version",0x00
 	strHelpMsg2		db  "Type exit for reboot",0x00
 	strHelpMsg3		db  "Type info for Hardware informations",0x00
 	strMouse0		db	"The Mouse Not Found",0x00
 	strMouse1		db 	"The MOuse Found",0x00
+
 	
 [SEGMENT .bss]
 	strUserCmd	resb	256		;buffer for user commands
@@ -585,6 +700,9 @@ _display_prompt:
 	strCmd4		resb	256
 	strVendorID	resb	16
 	strcputype	resb	64
-	strcpusno	resb 	64
+	strcpusno	resb 	8
+	basemem		resb	2
+	extmem1		resb	2
+	extmem2		resb	2
 
 ;********************end of the kernel code********************
